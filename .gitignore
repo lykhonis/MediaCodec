@@ -1,0 +1,11 @@
+.gradle
+/local.properties
+.DS_Store
+/captures
+gradlew
+gradlew.bat
+.idea
+MediaCodec.iml
+gradle
+build
+app/app.iml
