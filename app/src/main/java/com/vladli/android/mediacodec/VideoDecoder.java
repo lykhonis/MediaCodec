@@ -21,9 +21,9 @@ public class VideoDecoder implements VideoCodec {
         }
     }
 
-    public void configure(Surface surface, int width, int height, ByteBuffer csd0) {
+    public void configure(Surface surface, int width, int height, byte[] csd0, int offset, int size) {
         if (mWorker != null) {
-            mWorker.configure(surface, width, height, csd0);
+            mWorker.configure(surface, width, height, ByteBuffer.wrap(csd0, offset, size));
         }
     }
 
@@ -77,7 +77,7 @@ public class VideoDecoder implements VideoCodec {
 
         @SuppressWarnings("deprecation")
         public void decodeSample(byte[] data, int offset, int size, long presentationTimeUs, int flags) {
-            if (mConfigured) {
+            if (mConfigured && mRunning) {
                 int index = mCodec.dequeueInputBuffer(mTimeoutUs);
                 if (index >= 0) {
                     ByteBuffer buffer;

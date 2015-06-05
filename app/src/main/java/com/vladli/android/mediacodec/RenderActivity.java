@@ -84,22 +84,25 @@ public class RenderActivity extends Activity implements SurfaceHolder.Callback {
 
         @Override
         protected void onEncodedSample(MediaCodec.BufferInfo info, ByteBuffer data) {
+            // Here we could have just used ByteBuffer, but in real life case we might need to
+            // send sample over network, etc. This requires byte[]
+            if (mBuffer.length < info.size) {
+                mBuffer = new byte[info.size];
+            }
+            data.position(info.offset);
+            data.limit(info.offset + info.size);
+            data.get(mBuffer, 0, info.size);
+
             if ((info.flags & MediaCodec.BUFFER_FLAG_CODEC_CONFIG) == MediaCodec.BUFFER_FLAG_CODEC_CONFIG) {
                 // this is the first and only config sample, which contains information about codec
                 // like H.264, that let's configure the decoder
                 mDecoder.configure(mSurfaceView.getHolder().getSurface(),
                                    OUTPUT_WIDTH,
                                    OUTPUT_HEIGHT,
-                                   data);
+                                   mBuffer,
+                                   0,
+                                   info.size);
             } else {
-                // Here we could have just used ByteBuffer, but in real life case we might need to
-                // send sample over network, etc. This requires byte[]
-                if (mBuffer.length < info.size) {
-                    mBuffer = new byte[info.size];
-                }
-                data.position(info.offset);
-                data.limit(info.offset + info.size);
-                data.get(mBuffer, 0, info.size);
                 // pass byte[] to decoder's queue to render asap
                 mDecoder.decodeSample(mBuffer,
                                       0,
