@@ -79,25 +79,31 @@ public class VideoEncoder implements VideoCodec {
         @SuppressWarnings("deprecation")
         void encode() {
             if (!mRunning) {
+                // if not running anymore, complete stream
                 mCodec.signalEndOfInputStream();
             }
+            // New api is nicer, see below
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
                 ByteBuffer[] outputBuffers = mCodec.getOutputBuffers();
                 for (; ; ) {
+                    // MediaCodec is asynchronous, that's why we have a blocking check
+                    // to see if we have something to do
                     int status = mCodec.dequeueOutputBuffer(mBufferInfo, mTimeoutUsec);
                     if (status == MediaCodec.INFO_TRY_AGAIN_LATER) {
                         if (!mRunning) break;
                     } else if (status == MediaCodec.INFO_OUTPUT_BUFFERS_CHANGED) {
                         outputBuffers = mCodec.getOutputBuffers();
                     } else if (status >= 0) {
+                        // encoded sample
                         ByteBuffer data = outputBuffers[status];
                         data.position(mBufferInfo.offset);
                         data.limit(mBufferInfo.offset + mBufferInfo.size);
-                        onEncodedSample(mBufferInfo, data);
+                        final int endOfStream = mBufferInfo.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM;
+                        // pass to whoever listens to
+                        if (endOfStream == 0) onEncodedSample(mBufferInfo, data);
+                        // releasing buffer is important
                         mCodec.releaseOutputBuffer(status, false);
-                        if ((mBufferInfo.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) == MediaCodec.BUFFER_FLAG_END_OF_STREAM) {
-                            break;
-                        }
+                        if (endOfStream == MediaCodec.BUFFER_FLAG_END_OF_STREAM) break;
                     }
                 }
             } else {
@@ -106,10 +112,13 @@ public class VideoEncoder implements VideoCodec {
                     if (status == MediaCodec.INFO_TRY_AGAIN_LATER) {
                         if (!mRunning) break;
                     } else if (status >= 0) {
+                        // encoded sample
                         ByteBuffer data = mCodec.getOutputBuffer(status);
                         if (data != null) {
                             final int endOfStream = mBufferInfo.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM;
+                            // pass to whoever listens to
                             if (endOfStream == 0) onEncodedSample(mBufferInfo, data);
+                            // releasing buffer is important
                             mCodec.releaseOutputBuffer(status, false);
                             if (endOfStream == MediaCodec.BUFFER_FLAG_END_OF_STREAM) break;
                         }
@@ -119,6 +128,9 @@ public class VideoEncoder implements VideoCodec {
         }
 
         void release() {
+            // notify about destroying surface first before actually destroying it
+            // otherwise unexpected exceptions can happen, since we working in multiple threads
+            // simultaneously
             onSurfaceDestroyed(mSurface);
 
             mCodec.stop();
@@ -127,6 +139,7 @@ public class VideoEncoder implements VideoCodec {
         }
 
         void prepare() {
+            // configure video output
             MediaFormat format = MediaFormat.createVideoFormat(VIDEO_FORMAT, mWidth, mHeight);
             format.setInteger(MediaFormat.KEY_COLOR_FORMAT,
                               MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
@@ -140,7 +153,9 @@ public class VideoEncoder implements VideoCodec {
                 throw new RuntimeException(e);
             }
             mCodec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
+            // create surface associated with code
             mSurface = mCodec.createInputSurface();
+            // notify codec to start watch surface and encode samples
             mCodec.start();
 
             onSurfaceCreated(mSurface);

@@ -29,6 +29,9 @@ public class SurfaceRenderer {
     public void stopAndWait() {
         if (mRenderer != null) {
             mRenderer.setRunning(false);
+            // we want to make sure complete drawing cycle, otherwise
+            // unlockCanvasAndPost() will be the one who may or may not throw
+            // IllegalStateException
             try {
                 mRenderer.join();
             } catch (InterruptedException ignore) {

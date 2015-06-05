@@ -62,6 +62,8 @@ public class VideoDecoder implements VideoCodec {
                 throw new IllegalStateException("Decoder is already configured");
             }
             MediaFormat format = MediaFormat.createVideoFormat(VIDEO_FORMAT, width, height);
+            // little tricky here, csd-0 is required in order to configure the codec properly
+            // it is basically the first sample from encoder with flag: BUFFER_FLAG_CODEC_CONFIG
             format.setByteBuffer("csd-0", csd0);
             try {
                 mCodec = MediaCodec.createDecoderByType(VIDEO_FORMAT);
@@ -79,6 +81,7 @@ public class VideoDecoder implements VideoCodec {
                 int index = mCodec.dequeueInputBuffer(mTimeoutUs);
                 if (index >= 0) {
                     ByteBuffer buffer;
+                    // since API 21 we have new API to use
                     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
                         buffer = mCodec.getInputBuffers()[index];
                         buffer.clear();
@@ -101,12 +104,14 @@ public class VideoDecoder implements VideoCodec {
                     if (mConfigured) {
                         int index = mCodec.dequeueOutputBuffer(info, mTimeoutUs);
                         if (index >= 0) {
-                            mCodec.releaseOutputBuffer(index, info.size > 0);
+                            // setting true is telling system to render frame onto Surface
+                            mCodec.releaseOutputBuffer(index, true);
                             if ((info.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) == MediaCodec.BUFFER_FLAG_END_OF_STREAM) {
                                 break;
                             }
                         }
                     } else {
+                        // just waiting to be configured, then decode and render
                         try {
                             Thread.sleep(10);
                         } catch (InterruptedException ignore) {

@@ -18,6 +18,7 @@ import java.nio.ByteBuffer;
  */
 public class RenderActivity extends Activity implements SurfaceHolder.Callback {
 
+    // video output dimension
     static final int OUTPUT_WIDTH = 640;
     static final int OUTPUT_HEIGHT = 480;
 
@@ -43,6 +44,7 @@ public class RenderActivity extends Activity implements SurfaceHolder.Callback {
 
     @Override
     public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
+        // surface is fully initialized on the activity
         mDecoder.start();
         mEncoder.start();
     }
@@ -62,14 +64,20 @@ public class RenderActivity extends Activity implements SurfaceHolder.Callback {
             super(OUTPUT_WIDTH, OUTPUT_HEIGHT);
         }
 
+        // Both of onSurfaceCreated and onSurfaceDestroyed are called from codec's thread,
+        // non-UI thread
+
         @Override
         protected void onSurfaceCreated(Surface surface) {
+            // surface is created and codec is ready to accept input (Canvas)
             mRenderer = new MyRenderer(surface);
             mRenderer.start();
         }
 
         @Override
         protected void onSurfaceDestroyed(Surface surface) {
+            // need to make sure to block this thread to fully complete drawing cycle
+            // otherwise unpredictable exceptions will be thrown (aka IllegalStateException)
             mRenderer.stopAndWait();
             mRenderer = null;
         }
@@ -77,6 +85,8 @@ public class RenderActivity extends Activity implements SurfaceHolder.Callback {
         @Override
         protected void onEncodedSample(MediaCodec.BufferInfo info, ByteBuffer data) {
             if ((info.flags & MediaCodec.BUFFER_FLAG_CODEC_CONFIG) == MediaCodec.BUFFER_FLAG_CODEC_CONFIG) {
+                // this is the first and only config sample, which contains information about codec
+                // like H.264, that let's configure the decoder
                 mDecoder.configure(mSurfaceView.getHolder().getSurface(),
                                    OUTPUT_WIDTH,
                                    OUTPUT_HEIGHT,
@@ -90,6 +100,7 @@ public class RenderActivity extends Activity implements SurfaceHolder.Callback {
                 data.position(info.offset);
                 data.limit(info.offset + info.size);
                 data.get(mBuffer, 0, info.size);
+                // pass byte[] to decoder's queue to render asap
                 mDecoder.decodeSample(mBuffer,
                                       0,
                                       info.size,
@@ -99,6 +110,9 @@ public class RenderActivity extends Activity implements SurfaceHolder.Callback {
         }
     }
 
+    // All drawing is happening here
+    // We draw on virtual surface size of 640x480
+    // it will be automatically encoded into H.264 stream
     class MyRenderer extends SurfaceRenderer {
 
         TextPaint mPaint;
@@ -127,6 +141,7 @@ public class RenderActivity extends Activity implements SurfaceHolder.Callback {
             // non-UI thread
             canvas.drawColor(Color.BLACK);
 
+            // setting some text paint
             if (mPaint == null) {
                 mPaint = new TextPaint();
                 mPaint.setAntiAlias(true);
